@@ -1,0 +1,404 @@
+<html>
+<head>
+<script src="./node_modules/tracking/build/tracking-min.js"></script>
+<style>
+.demo-container *{
+  position: fixed;
+}
+</style>
+</head>
+<body>
+
+  <div class="demo-frame">
+    <div class="demo-container">
+      <video id="video" width="600" height="450" preload autoplay loop muted controls></video>
+      <canvas id="canvas" width="600" height="450"></canvas>
+      <canvas id="canvas2" width="600" height="450"></canvas>
+    </div>
+  </div>
+
+  <script>
+
+  nyanlock = 0;
+
+  function is_in_triangle (px,py,ax,ay,bx,by,cx,cy){
+
+//credit: http://www.blackpawn.com/texts/pointinpoly/default.html
+
+var v0 = [cx-ax,cy-ay];
+var v1 = [bx-ax,by-ay];
+var v2 = [px-ax,py-ay];
+
+var dot00 = (v0[0]*v0[0]) + (v0[1]*v0[1]);
+var dot01 = (v0[0]*v1[0]) + (v0[1]*v1[1]);
+var dot02 = (v0[0]*v2[0]) + (v0[1]*v2[1]);
+var dot11 = (v1[0]*v1[0]) + (v1[1]*v1[1]);
+var dot12 = (v1[0]*v2[0]) + (v1[1]*v2[1]);
+
+var invDenom = 1/ (dot00 * dot11 - dot01 * dot01);
+
+var u = (dot11 * dot02 - dot01 * dot12) * invDenom;
+var v = (dot00 * dot12 - dot01 * dot02) * invDenom;
+
+return ((u >= 0) && (v >= 0) && (u + v < 1));
+}
+
+  var rainbow = 0;
+
+  function hslToRgb(h, s, l){
+    var r, g, b;
+
+    if(s == 0){
+        r = g = b = l; // achromatic
+    }else{
+        var hue2rgb = function hue2rgb(p, q, t){
+            if(t < 0) t += 1;
+            if(t > 1) t -= 1;
+            if(t < 1/6) return p + (q - p) * 6 * t;
+            if(t < 1/2) return q;
+            if(t < 2/3) return p + (q - p) * (2/3 - t) * 6;
+            return p;
+        }
+
+        var q = l < 0.5 ? l * (1 + s) : l + s - l * s;
+        var p = 2 * l - q;
+        r = hue2rgb(p, q, h + 1/3);
+        g = hue2rgb(p, q, h);
+        b = hue2rgb(p, q, h - 1/3);
+    }
+
+    return "rgba("+Math.round(r * 255)+', '+Math.round(g * 255)+', '+Math.round(b * 255)+",1)";
+}
+
+
+  const seqJoin = (arr1, arr2) => {
+    let s1 = arr1[0], s2 = arr2[0], e1 = arr1.slice(-1)[0], e2 = arr2.slice(-1)[0];
+    let a1Dir = e1 == e2 || e1 == s2;
+    let a2Dir = s2 == s1 || s2 == e1;
+    let retarr = [];
+    for (i=0; i < arr1.length; i++){
+      retarr.push(arr1[a1Dir ? i : arr1.length - (i+1)]);
+    }
+    for (i=1; i < arr2.length; i++){
+      retarr.push(arr2[a2Dir ? i : arr2.length - (i+1)]);
+    }
+    return retarr;
+  }
+
+  const elIsInArray = (el, array) => array.indexOf(el) != -1;
+
+  const mdl = (a, n) => a - Math.floor(a/n) * n
+
+  const angleDiff = (angle1, angle2) => {
+    let an = angle1 - angle2
+    an = mdl((an + Math.PI), (Math.PI * 2)) - Math.PI
+    return Math.min(Math.abs(an), Math.abs(an-Math.PI), Math.abs(an+Math.PI))
+  }
+
+  const findLine = (feature, angle, features, seedEdges, lineFeatures) => {
+    lineFeatures = lineFeatures || [];
+    lineFeatures.push(feature.id);
+    feature.edges.map(edge=>{
+      if ((angleDiff(angle, edge.angle)) < Math.PI / 10){
+        if (!elIsInArray(edge.f2, lineFeatures)){
+          let key = [edge.f2, feature.id].sort().toString();
+          if (!elIsInArray(key, seedEdges)){
+          seedEdges.push(key);
+          findLine(features[edge.f2], angle, features, seedEdges, lineFeatures);
+          }
+        }
+      }
+    });
+    return lineFeatures;
+  }
+
+  let findGrid = (features) => {
+    let edges = [];
+    features.map((feature, fidx)=>{
+      let lines = [];
+      let minSize = feature.r * 0.5;
+      let maxSize = feature.r * 1.5;
+      feature.distances.filter(
+          f=>(
+               (f.distance < feature.mindist*1.2)
+            && (features[f.id].r >= minSize)
+            && (features[f.id].r <=maxSize)
+            && (f.id != feature.id)
+          )
+        ).map(otherFeature=>{
+        edges.push({
+          f1:fidx,
+          f2:otherFeature.id,
+          angle:otherFeature.angle,
+          distance:otherFeature.distance
+        });
+        feature.edges = feature.edges || [];
+        features[otherFeature.id].edges = features[otherFeature.id].edges || [];
+        feature.edges.push({
+          f1:fidx,
+          f2:otherFeature.id,
+          angle:otherFeature.angle,
+          distance:otherFeature.distance
+        });
+        //context.beginPath();
+        //context.moveTo(features[fidx].cx, features[fidx].cy);
+        //context.lineTo(features[otherFeature.id].cx, features[otherFeature.id].cy);
+        //context.stroke();
+      });
+    });
+    let seedEdges = [];
+    let lines5 = [];
+    let lines4 = [];
+    features.filter(feature=>feature.edges).map((feature, fidx)=>{
+      feature.edges.map(edge=>{
+        let lf = findLine(feature, edge.angle, features, seedEdges);
+        if (lf.length < 4){ return }
+        let field = (
+          Math.abs(features[lf[0]].cx - features[lf[1]].cx)
+          < Math.abs(features[lf[0]].cy - features[lf[1]].cy)) ? "cy" : "cx";
+        lf = lf.sort((a,b)=>features[a][field] > features[b][field] ? 1 : -1);
+        if (lf.length == 4){lines4.push(lf)}
+        if (lf.length == 5){lines5.push(lf)}
+      });
+    });
+    // Now we want to find two 5-lines sharing one end with a 5-line and one
+    // with a 4-line
+
+    // First pair up 5/4 lines
+    let pairs54 = [];
+    lines5.map((line5, l5id)=>{
+      l5start = line5[0];
+      l5end = line5.slice(-1)[0];
+      lines4.map((line4, l4id)=>{
+        l4start = line4[0];
+        l4end = line4.slice(-1)[0];
+        if (l5start == l4start){
+          pairs54.push({l4id, l5id, joinedOn: l5start, l5Open:l5end})
+        }
+        else if (l5end == l4end){
+          pairs54.push({l4id, l5id, joinedOn: l5end, l5Open:l5start})
+        }
+        else if (l5start == l4end){
+          pairs54.push({l4id, l5id, joinedOn: l5start, l5Open:l5end})
+        }
+        else if (l5end == l4start){
+          pairs54.push({l4id, l5id, joinedOn: l5end, l5Open:l5start})
+        }
+      });
+    });
+    ok = false;
+    cursor.t1 = false;
+    cursor.t2 = false;
+    cursor.found = false;
+    pairs54.map((p541, p541Id)=>{
+      pairs54.map((p542, p542Id)=>{
+        if (p541Id >= p542Id){return}
+        if ((p541.l4id == p542.l4id) || (p541.l5id == p542.l5id)){return}
+        if (p541.l5Open, p542.l5Open){
+          let gridseq = seqJoin(lines4[p541.l4id], lines5[p541.l5id]);
+          gridseq = seqJoin(gridseq, lines5[p542.l5id]);
+          gridseq = seqJoin(gridseq, lines4[p542.l4id]);
+          //console.log(gridseq);
+          gridseq.map((f, lid)=>{
+            f2 = gridseq[lid+1];
+            if (f2){
+              context.beginPath();
+              context.lineWidth = 4;
+              context.strokeStyle="rgba(0,0,0,1)";
+              context.moveTo(features[f].cx, features[f].cy);
+              context.lineTo(features[f2].cx, features[f2].cy);
+              context.stroke();
+            }
+          });
+          for (idxs of [[0,10], [1,9], [2,8], [4,14], [5,13], [6,12]]){
+            context.beginPath();
+            context.lineWidth = 2;
+            context.strokeStyle="rgba(0,0,0,1)";
+            context.moveTo(features[gridseq[idxs[0]]].cx, features[gridseq[idxs[0]]].cy);
+            context.lineTo(features[gridseq[idxs[1]]].cx, features[gridseq[idxs[1]]].cy);
+            context.stroke();
+          }
+          ok = true;
+          t1p1x = features[gridseq[0]].cx;
+          t1p1y = features[gridseq[0]].cy;
+          t1p2x = features[gridseq[3]].cx;
+          t1p2y = features[gridseq[3]].cy;
+          t1p3x = features[gridseq[6]].cx;
+          t1p3y = features[gridseq[6]].cy;
+          t1cx = (features[gridseq[0]].cx + features[gridseq[3]].cx + features[gridseq[6]].cx) / 3;
+          t1cy = (features[gridseq[0]].cy + features[gridseq[3]].cy + features[gridseq[6]].cy) / 3;
+
+          t1p1x = t1p1x * 0.7 + t1cx * 0.3;
+          t1p1y = t1p1y * 0.7 + t1cy * 0.3;
+          t1p2x = t1p2x * 0.7 + t1cx * 0.3;
+          t1p2y = t1p2y * 0.7 + t1cy * 0.3;
+          t1p3x = t1p3x * 0.7 + t1cx * 0.3;
+          t1p3y = t1p3y * 0.7 + t1cy * 0.3;
+
+          t2p1x = features[gridseq[0]].cx;
+          t2p1y = features[gridseq[0]].cy;
+          t2p2x = features[gridseq[2]].cx;
+          t2p2y = features[gridseq[2]].cy;
+          t2p3x = features[gridseq[9]].cx;
+          t2p3y = features[gridseq[9]].cy;
+          t2cx = (features[gridseq[0]].cx + features[gridseq[2]].cx + features[gridseq[9]].cx) / 3;
+          t2cy = (features[gridseq[0]].cy + features[gridseq[2]].cy + features[gridseq[9]].cy) / 3;
+
+          t2p1x = t2p1x * 0.7 + t2cx * 0.3;
+          t2p1y = t2p1y * 0.7 + t2cy * 0.3;
+          t2p2x = t2p2x * 0.7 + t2cx * 0.3;
+          t2p2y = t2p2y * 0.7 + t2cy * 0.3;
+          t2p3x = t2p3x * 0.7 + t2cx * 0.3;
+          t2p3y = t2p3y * 0.7 + t2cy * 0.3;
+
+          cursor.found = true;
+
+          features.map(d=>{
+            d.inT1 = is_in_triangle(d.cx, d.cy, t1p1x, t1p1y, t1p2x, t1p2y,t1p3x, t1p3y);
+            d.inT2 = is_in_triangle(d.cx, d.cy, t2p1x, t2p1y, t2p2x, t2p2y,t2p3x, t2p3y);
+            if (d.inT1){ cursor.t1 = true }
+            if (d.inT2){ cursor.t2 = true }
+          });
+          cursor.gotox = (features[gridseq[1]].cx + features[gridseq[9]].cx) / 2;
+          cursor.gotoy = (features[gridseq[1]].cy + features[gridseq[9]].cy) / 2;
+        }
+      });
+    });
+    //if (!ok){if (Math.random() > 0.92){hello()}}
+  }
+
+  let bitMarkFinder = (features) => {
+
+    features.forEach(function(rect, rectId) {
+      rect.id = rectId;
+      rect.cx = rect.x + rect.width/2;
+      rect.cy = rect.y + rect.height/2;
+      rect.r = Math.sqrt((rect.width **2) + (rect.height **2)) / 2;
+    });
+
+    //features.forEach(rect=>{
+    //  context.fillStyle = "red";
+    //  context.beginPath();
+    //  context.arc(rect.cx, rect.cy, rect.r,0,2*Math.PI);
+    //  context.fill();
+    //})
+
+    features.forEach(function(rect1, r1Id) {
+      rect1.distances = [];
+      rect1.mindist = 1000000;
+      rect1.nearest = null;
+      let minr = rect1 * 0.75;
+      let maxr = rect1 * 1.25;
+      features.forEach(function(rect2, r2Id) {
+        if (r1Id != r2Id){
+          let distance = Math.sqrt((rect1.cx-rect2.cx)**2 + (rect1.cy-rect2.cy)**2);
+          let angle = Math.atan2((rect1.cx-rect2.cx) , (rect1.cy-rect2.cy));
+          if (distance < rect1.mindist){
+            rect1.mindist = distance;
+            rect1.nearest = r2Id;
+          }
+          rect1.distances.push({id:r2Id, distance, angle});
+        }
+      });
+    });
+    findGrid(features);
+  }
+
+
+
+
+
+
+
+    window.onload = function() {
+      cursor = {x:0, y:0, gotox:0, gotoy:0};
+      var video = document.getElementById('video');
+      var canvas = document.getElementById('canvas');
+      var canvas2 = document.getElementById('canvas2');
+       context = canvas.getContext('2d');
+       context2 = canvas2.getContext('2d');
+      tracking.ColorTracker.registerColor('white', function(r, g, b) {
+        if (r > 250 && g > 220 && b > 220) {
+          return true;
+        }
+        return false;
+      });
+      var tracker = new tracking.ColorTracker(["white"]);
+      tracker.minDimension = 4;
+      tracker.minGroupSize = 10;
+      tracking.track('#video', tracker, { camera: true });
+      g = tracker;
+      tracker.on('track', function(event) {
+        context.clearRect(0, 0, canvas.width, canvas.height);
+        event.data.forEach(function(rect) {
+          rect.color= "black";
+          context.strokeStyle = rect.color;
+          //context.strokeRect(rect.x, rect.y, rect.width, rect.height);
+          context.font = '11px Helvetica';
+          context.fillStyle = "#fff";
+          rect.cx = rect.x + rect.width/2;
+          rect.cy = rect.y + rect.height/2;
+          //context.strokeRect(rect.cx-0.5, rect.cy-0.5, 1,1)
+        });
+        bitMarkFinder(event.data);
+        event.data.forEach(function(rect1, r1Id) {
+          rect1.distances = [];
+          rect1.mindist = 1000000;
+          rect1.nearest = null;
+          event.data.forEach(function(rect2, r2Id) {
+            if (r1Id != r2Id){
+              let distance = Math.sqrt((rect1.cx-rect2.cx)**2 + (rect1.cx-rect2.cx)**2);
+              let angle = Math.atan2((rect1.cx-rect2.cx) - (rect1.cx-rect2.cx));
+              if (distance < rect1.mindist){
+                rect1.mindist = distance;
+                rect1.nearest = r2Id;
+              }
+              rect1.distances.push({id:r2Id, distance, angle});
+            }
+          });
+        });
+
+        context2.beginPath();
+        rainbow += 0.01;
+        rainbow = rainbow % 1;
+        context2.lineCap = 'round';
+        context2.strokeStyle = hslToRgb(rainbow, 0.5,0.5);
+
+        context2.moveTo(cursor.x, cursor.y);
+        cursor.x = (cursor.x * 0.95 + cursor.gotox * 0.05);
+        cursor.y = (cursor.y * 0.95 + cursor.gotoy * 0.05);
+        context2.lineWidth = 10;
+        if (cursor.t1){
+          context2.lineTo(cursor.x, cursor.y);
+          context2.stroke();
+        } else {
+          context2.moveTo(cursor.x, cursor.y);
+        }
+        if (cursor.t2){
+          context2.clearRect(0,0,1000,1000);
+        }
+
+          var d = new Date();
+          var seconds = d.getTime() / 1000;
+          if (seconds > nyanlock){
+            var path = "/lh";
+            var oReq = new XMLHttpRequest();
+            if (cursor.found){path += "K"}
+            if (cursor.t1){path += "A"}
+            if (cursor.t2){path += "B"}
+            oReq.open("GET", path);
+            oReq.send();
+            nyanlock = seconds + 1;
+          }
+        context.beginPath();
+
+        context.fillStyle = "red";
+        context.arc(cursor.x, cursor.y, 10, 0, Math.PI * 2);
+        context2.arc(cursor.x, cursor.y, 10, 0, Math.PI * 2);
+        context.fill();
+      });
+    };
+  </script>
+
+</body>
+</html>

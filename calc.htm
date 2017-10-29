@@ -1,0 +1,196 @@
+<canvas id="canvas" width="600" height="450"></canvas>
+<script>
+
+var canvas = document.getElementById('canvas');
+var context = canvas.getContext('2d');
+
+const seqJoin = (arr1, arr2) => {
+  let s1 = arr1[0], s2 = arr2[0], e1 = arr1.slice(-1)[0], e2 = arr2.slice(-1)[0];
+  let a1Dir = e1 == e2 || e1 == s2;
+  let a2Dir = s2 == s1 || s2 == e1;
+  let retarr = [];
+  for (i=0; i < arr1.length; i++){
+    retarr.push(arr1[a1Dir ? i : arr1.length - (i+1)]);
+  }
+  for (i=1; i < arr2.length; i++){
+    retarr.push(arr2[a2Dir ? i : arr2.length - (i+1)]);
+  }
+  return retarr;
+}
+
+const elIsInArray = (el, array) => array.indexOf(el) != -1;
+
+const mdl = (a, n) => a - Math.floor(a/n) * n
+
+const angleDiff = (angle1, angle2) => {
+  let an = angle1 - angle2
+  an = mdl((an + Math.PI), (Math.PI * 2)) - Math.PI
+  return Math.min(Math.abs(an), Math.abs(an-Math.PI), Math.abs(an+Math.PI))
+}
+
+const findLine = (feature, angle, features, seedEdges, lineFeatures) => {
+  lineFeatures = lineFeatures || [];
+  lineFeatures.push(feature.id);
+  feature.edges.map(edge=>{
+    if ((angleDiff(angle, edge.angle)) < Math.PI / 10){
+      if (!elIsInArray(edge.f2, lineFeatures)){
+        let key = [edge.f2, feature.id].sort().toString();
+        if (!elIsInArray(key, seedEdges)){
+        seedEdges.push(key);
+        findLine(features[edge.f2], angle, features, seedEdges, lineFeatures);
+        }
+      }
+    }
+  });
+  return lineFeatures;
+}
+
+let findGrid = (features) => {
+  let edges = [];
+  features.map((feature, fidx)=>{
+    let lines = [];
+    let minSize = feature.r * 0.75;
+    let maxSize = feature.r * 1.25;
+    feature.distances.filter(
+        f=>(
+             (f.distance < feature.mindist*1.3)
+          && (features[f.id].r >= minSize)
+          && (features[f.id].r <=maxSize)
+          && (f.id != feature.id)
+        )
+      ).map(otherFeature=>{
+      edges.push({
+        f1:fidx,
+        f2:otherFeature.id,
+        angle:otherFeature.angle,
+        distance:otherFeature.distance
+      });
+      feature.edges = feature.edges || [];
+      features[otherFeature.id].edges = features[otherFeature.id].edges || [];
+      feature.edges.push({
+        f1:fidx,
+        f2:otherFeature.id,
+        angle:otherFeature.angle,
+        distance:otherFeature.distance
+      });
+    });
+  });
+  let seedEdges = [];
+  let lines5 = [];
+  let lines4 = [];
+  features.filter(feature=>feature.edges).map((feature, fidx)=>{
+    feature.edges.map(edge=>{
+      let lf = findLine(feature, edge.angle, features, seedEdges);
+      lf = lf.sort((a,b)=>features[a].cx > features[b].cx ? 1 : -1);
+      if (lf.length == 4){lines4.push(lf)}
+      if (lf.length == 5){lines5.push(lf)}
+
+    });
+  });
+  // Now we want to find two 5-lines sharing one end with a 5-line and one
+  // with a 4-line
+
+  // First pair up 5/4 lines
+  let pairs54 = [];
+  lines5.map((line5, l5id)=>{
+    l5start = line5[0];
+    l5end = line5.slice(-1)[0];
+    lines4.map((line4, l4id)=>{
+      l4start = line4[0];
+      l4end = line4.slice(-1)[0];
+      if (l5start == l4start){
+        pairs54.push({l4id, l5id, joinedOn: l5start, l5Open:l5end})
+      }
+      else if (l5end == l4end){
+        pairs54.push({l4id, l5id, joinedOn: l5end, l5Open:l5start})
+      }
+      else if (l5start == l4end){
+        pairs54.push({l4id, l5id, joinedOn: l5start, l5Open:l5end})
+      }
+      else if (l5end == l4start){
+        pairs54.push({l4id, l5id, joinedOn: l5end, l5Open:l5start})
+      }
+    });
+  });
+  pairs54.map((p541, p541Id)=>{
+    pairs54.map((p542, p542Id)=>{
+      if (p541Id >= p542Id){return}
+      if ((p541.l4id == p542.l4id) || (p541.l5id == p542.l5id)){return}
+      if (p541.l5Open, p542.l5Open){
+        let gridseq = seqJoin(lines4[p541.l4id], lines5[p541.l5id]);
+        gridseq = seqJoin(gridseq, lines5[p542.l5id]);
+        gridseq = seqJoin(gridseq, lines4[p542.l4id]);
+        console.log(gridseq);
+        gridseq.map((f, lid)=>{
+          f2 = gridseq[lid+1];
+          if (f2){
+            context.beginPath();
+            context.lineWidth = 2;
+            context.strokeStyle="rgba(0,0,0,0.3)";
+            context.moveTo(features[f].cx, features[f].cy);
+            context.lineTo(features[f2].cx, features[f2].cy);
+            context.stroke();
+          }
+        });
+        for (idxs of [[0,10], [1,9], [2,8], [4,14], [5,13], [6,12]]){
+          context.beginPath();
+          context.lineWidth = 2;
+          context.strokeStyle="rgba(0,0,0,0.3)";
+          context.moveTo(features[gridseq[idxs[0]]].cx, features[gridseq[idxs[0]]].cy);
+          context.lineTo(features[gridseq[idxs[1]]].cx, features[gridseq[idxs[1]]].cy);
+          context.stroke();
+        }
+      }
+    });
+  });
+}
+
+let bitMarkFinder = (features) => {
+
+  features.forEach(function(rect, rectId) {
+    rect.id = rectId;
+    rect.cx = rect.x + rect.width/2;
+    rect.cy = rect.y + rect.height/2;
+    rect.r = Math.sqrt((rect.width **2) + (rect.height **2)) / 2;
+  });
+
+  features.forEach(rect=>{
+    context.fillStyle = rect.id == 3 ? "black" : "red";
+    context.arc(rect.cx, rect.cy, rect.r,0,2*Math.PI);
+    context.fill();
+    context.beginPath();
+  })
+
+  features.forEach(function(rect1, r1Id) {
+    rect1.distances = [];
+    rect1.mindist = 1000000;
+    rect1.nearest = null;
+    features.forEach(function(rect2, r2Id) {
+      if (r1Id != r2Id){
+        let distance = Math.sqrt((rect1.cx-rect2.cx)**2 + (rect1.cy-rect2.cy)**2);
+        let angle = Math.atan2((rect1.cx-rect2.cx) , (rect1.cy-rect2.cy));
+        if (distance < rect1.mindist){
+          rect1.mindist = distance;
+          rect1.nearest = r2Id;
+        }
+        rect1.distances.push({id:r2Id, distance, angle});
+      }
+    });
+  });
+  findGrid(features);
+}
+
+features = [{"width":54,"height":48,"x":381,"y":0,"color":"black","cx":408,"cy":24},{"width":4,"height":5,"x":514,"y":364,"color":"black","cx":516,"cy":366.5},{"width":5,"height":5,"x":504,"y":365,"color":"black","cx":506.5,"cy":367.5},{"width":4,"height":4,"x":494,"y":366,"color":"black","cx":496,"cy":368},{"width":4,"height":4,"x":484,"y":367,"color":"black","cx":486,"cy":369},{"width":5,"height":4,"x":514,"y":374,"color":"black","cx":516.5,"cy":376},{"width":5,"height":4,"x":474,"y":378,"color":"black","cx":476.5,"cy":380},{"width":4,"height":5,"x":516,"y":385,"color":"black","cx":518,"cy":387.5},{"width":5,"height":5,"x":475,"y":388,"color":"black","cx":477.5,"cy":390.5},{"width":5,"height":5,"x":516,"y":395,"color":"black","cx":518.5,"cy":397.5},{"width":5,"height":5,"x":476,"y":399,"color":"black","cx":478.5,"cy":401.5},{"width":5,"height":5,"x":517,"y":405,"color":"black","cx":519.5,"cy":407.5},{"width":4,"height":5,"x":498,"y":407,"color":"black","cx":500,"cy":409.5},{"width":4,"height":4,"x":508,"y":407,"color":"black","cx":510,"cy":409},{"width":4,"height":5,"x":478,"y":409,"color":"black","cx":480,"cy":411.5},{"width":4,"height":4,"x":488,"y":409,"color":"black","cx":490,"cy":411}]
+
+for (let i = 0; i <= 150; i++){
+  width = Math.random() * 20;
+  height = Math.random() * 20;
+  x = Math.random() * 600;
+  y = Math.random() * 450;
+  features.push({width, height, x, y});
+}
+
+for (i=0; i<=2; i++){
+bitMarkFinder(features);
+}
+</script>
