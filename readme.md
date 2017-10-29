@@ -11,7 +11,7 @@ recognise my lovely micro:bit and tell me which LEDs are on and off.
 You mean like [this](http://www.recantha.co.uk/blog/?p=15074)? I guess it's fun to try something
 different (even if it's a silly idea).
 
-## So how does this work?
+## So how does this work?
 
 Well... you flash the micro:bits with some python which lights up a ring of LEDs around the edge
 of the display - that makes a pattern which is easy to find. One light is kept off so the computer
@@ -24,5 +24,10 @@ By looking for lines of bright lights, you can find the micro:bit display.
 When you press `Button A`, it turns on more LEDs which tells the computer to start drawing a line.
 When you press `Button B`, it turns on an LED which tells the computer to delete the line. The 
 terminal tells you which lights are on and which buttons are pressed.
+
+## Did it work?
+
+Sort of. It's not bad for about 3 hours of coding but it could be a lot better. You can watch 
+[a demo on youtube](https://www.youtube.com/watch?v=YkIft5X6lR3A).
 
 [![StupidIO](https://img.youtube.com/vi/kIft5X6lR3A/0.jpg)](https://www.youtube.com/watch?v=YkIft5X6lR3A)
