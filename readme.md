@@ -1,4 +1,4 @@
-# StupidIO - A really silly way to send data from micro:bit to your laptop
+# SillIO - A really silly way to send data from micro:bit to your laptop
 
 ## ...why?
 
@@ -30,7 +30,7 @@ terminal tells you which lights are on and which buttons are pressed.
 Sort of. It's not bad for about 2 hours of coding around PyCon but it could be a lot better. 
 You can watch [a demo on youtube](https://www.youtube.com/watch?v=YkIft5X6lR3A).
 
-[![StupidIO](https://img.youtube.com/vi/kIft5X6lR3A/0.jpg)](https://www.youtube.com/watch?v=YkIft5X6lR3A)
+[![SillIO](https://img.youtube.com/vi/kIft5X6lR3A/0.jpg)](https://www.youtube.com/watch?v=YkIft5X6lR3A)
 
 ## I reckon I could do that much better
 
