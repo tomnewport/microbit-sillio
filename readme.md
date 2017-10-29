@@ -1,4 +1,7 @@
-# SillIO - A really silly way to send data from micro:bit to your laptop
+# SillIO
+
+A really silly way to send data from micro:bit to your laptop using the micro:bit display and laptop
+webcam.
 
 ## ...why?
 
