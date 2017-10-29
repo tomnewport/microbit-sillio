@@ -27,7 +27,25 @@ terminal tells you which lights are on and which buttons are pressed.
 
 ## Did it work?
 
-Sort of. It's not bad for about 3 hours of coding but it could be a lot better. You can watch 
-[a demo on youtube](https://www.youtube.com/watch?v=YkIft5X6lR3A).
+Sort of. It's not bad for about 2 hours of coding around PyCon but it could be a lot better. 
+You can watch [a demo on youtube](https://www.youtube.com/watch?v=YkIft5X6lR3A).
 
 [![StupidIO](https://img.youtube.com/vi/kIft5X6lR3A/0.jpg)](https://www.youtube.com/watch?v=YkIft5X6lR3A)
+
+## I reckon I could do that much better
+
+Yeah, so do I. You can use my code if you like - just clone, fork or download. If you make something cool
+let me know, or make a pull request. Or send me ideas through the issue tracker. I might take a while to
+respond but I'll get back to you eventually!
+
+## How can I run this
+
+There are very few comments and no documentation. Sorry about that. To run it, you'll need to:
+
+1. Download this repository
+2. Flash the `marker.py` file onto your micro:bit
+3. Install python3 and pip if you don't already have them
+4. Install pipenv using pip (`pip install pipenv`)
+5. Install dependencies in a virtual environment (`pipenv shell`)
+6. Run the server (`python pyserv.py`)
+7. Go to [localhost:8888](http://localhost:8888) and see what happens.
